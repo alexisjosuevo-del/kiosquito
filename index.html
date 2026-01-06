@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Kioskito | Inventario & Ventas (Offline)</title>
+  <link rel="icon" href="assets/logo.jpeg" />
+  <link rel="stylesheet" href="app.css" />
+  <script type="module" src="./app_offline.js"></script>
+</head>
+<body>
+  <header id="topbar" class="topbar">
+    <div class="brand">
+      <img src="assets/logo.jpeg" class="logo" alt="Kioskito" />
+      <div>
+        <div class="brand-title">Kioskito</div>
+        <div class="brand-sub">Inventario & Punto de venta (Offline demo)</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div id="whoami" class="muted"></div><div id="clock" class="muted clock"></div>
+      <button id="btnSignOut" class="btn btn-ghost hidden">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- AUTH -->
+    <section id="authView" class="login-page">
+      <div class="login-card" role="dialog" aria-label="Inicio de sesión">
+        <div class="login-head">
+          <img src="assets/logo.jpeg" class="login-logo" alt="Kioskito" />
+          <h1 class="login-title">Iniciar sesión</h1>
+          <p class="muted">Acceso offline • Admin / Vendedor</p>
+        </div>
+
+        <div class="login-fields">
+          <label class="login-field">
+            <span class="login-icon" aria-hidden="true">👤</span>
+            <input id="loginEmail" type="text" placeholder="Usuario" autocomplete="username" />
+          </label>
+
+          <label class="login-field">
+            <span class="login-icon" aria-hidden="true">🔒</span>
+            <input id="loginPass" type="password" placeholder="Contraseña" autocomplete="current-password" />
+          </label>
+        </div>
+
+        <div class="login-row">
+          <label class="remember">
+            <input id="rememberMe" type="checkbox" checked />
+            Recordarme
+          </label>
+          <button id="btnForgot" class="link" type="button">¿Olvidaste tu contraseña?</button>
+        </div>
+
+        <button id="btnLogin" class="btn btn-primary full" type="button">Entrar</button>
+        <div id="authMsg" class="msg"></div>
+
+        <div class="login-hint muted small">
+          Demo: <span class="kbd">admin</span>/<span class="kbd">1234</span> • <span class="kbd">vendedor</span>/<span class="kbd">1234</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- APP -->
+    <section id="appView" class="hidden">
+      <nav class="tabs">
+        <button class="tab active" data-tab="pos">Punto de venta</button>
+        <button class="tab" data-tab="cash">Caja</button>
+        <button class="tab admin-only hidden" data-tab="products">Productos</button>
+        <button class="tab admin-only hidden" data-tab="inventory">Inventario</button>
+        <button class="tab admin-only hidden" data-tab="reports">Reportes</button>
+        <button class="tab admin-only hidden" data-tab="admin">Admin</button>
+      </nav>
+
+      <section id="tab-pos" class="tabpane card">
+        <div class="pane-header">
+          <h2>Punto de venta</h2>
+          <div class="muted" id="posShiftHint"></div>
+        </div>
+
+        <div class="grid2">
+          <div>
+            <h3>Buscar producto</h3>
+            <input id="posSearch" placeholder="Escribe para buscar (ej. coca)" />
+            <div id="posResults" class="list"></div>
+          </div>
+
+          <div>
+            <h3>Carrito</h3>
+            <div id="cart" class="list"></div>
+
+            <div class="totals">
+              <div class="tot-row"><span>Subtotal</span><strong id="cartSubtotal">$0.00</strong></div>
+              <div class="tot-row"><span>Total</span><strong id="cartTotal">$0.00</strong></div>
+            </div>
+
+            <div class="grid2">
+              <label>
+                Método de pago
+                <select id="payMethod">
+                  <option value="cash">Efectivo</option>
+                  <option value="card">Tarjeta</option>
+                  <option value="transfer">Transferencia</option>
+                </select>
+              </label>
+              <label>
+                Nota (opcional)
+                <input id="saleNote" placeholder="Ej. cliente pidió sin hielo" />
+              </label>
+            </div>
+
+            <div class="row">
+              <button id="btnCheckout" class="btn">Cobrar / Registrar venta</button>
+              <button id="btnClearCart" class="btn btn-ghost">Vaciar</button>
+            </div>
+            <div id="posMsg" class="msg"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-cash" class="tabpane card hidden">
+        <div class="pane-header">
+          <h2>Caja (por usuario y día)</h2>
+          <div class="muted">Apertura/cierre de caja y total del día.</div>
+        </div>
+
+        <div class="grid2">
+          <div class="card inner">
+            <h3>Apertura</h3>
+            <label>
+              Efectivo inicial
+              <input id="openCash" type="number" step="0.01" placeholder="0.00" />
+            </label>
+            <button id="btnOpenShift" class="btn">Abrir caja</button>
+            <div id="openMsg" class="msg"></div>
+          </div>
+
+          <div class="card inner">
+            <h3>Cierre</h3>
+            <div class="muted" id="shiftSummary"></div>
+            <label>
+              Efectivo contado (arqueo)
+              <input id="countedCash" type="number" step="0.01" placeholder="0.00" />
+            </label>
+            <button id="btnCloseShift" class="btn btn-ghost">Cerrar caja</button>
+            <div id="closeMsg" class="msg"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-products" class="tabpane card hidden admin-only">
+        <div class="pane-header">
+          <h2>Productos</h2>
+          <div class="muted">Editar precio, activar/desactivar.</div>
+        </div>
+        <div class="row">
+          <input id="prodSearch" placeholder="Buscar producto..." />
+          <button id="btnReloadProducts" class="btn btn-ghost">Actualizar</button>
+        </div>
+        <div id="productsTable" class="table"></div>
+        <div id="prodMsg" class="msg"></div>
+      </section>
+
+      <section id="tab-inventory" class="tabpane card hidden admin-only">
+        <div class="pane-header">
+          <h2>Inventario</h2>
+          <div class="muted">Entradas/salidas de stock (se descuenta automáticamente con ventas).</div>
+        </div>
+
+        <div class="grid2">
+          <div>
+            <h3>Ajuste rápido</h3>
+            <input id="invSearch" placeholder="Buscar producto..." />
+            <div id="invResults" class="list"></div>
+          </div>
+          <div>
+            <h3>Movimiento</h3>
+            <div class="muted" id="invSelectedHint">Selecciona un producto…</div>
+
+            <div class="grid2">
+              <label>
+                Tipo
+                <select id="invType">
+                  <option value="in">Entrada</option>
+                  <option value="out">Salida</option>
+                  <option value="set">Fijar stock</option>
+                </select>
+              </label>
+              <label>
+                Cantidad
+                <input id="invQty" type="number" step="1" placeholder="0" />
+              </label>
+            </div>
+
+            <label>
+              Motivo (opcional)
+              <input id="invReason" placeholder="Ej. compra proveedor / merma" />
+            </label>
+
+            <button id="btnApplyInv" class="btn">Aplicar</button>
+            <div id="invMsg" class="msg"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-reports" class="tabpane card hidden admin-only">
+        <div class="pane-header">
+          <h2>Reportes</h2>
+          <div class="muted">Ventas de hoy y por usuario.</div>
+        </div>
+
+        <div class="row">
+          <button id="btnLoadToday" class="btn btn-ghost">Cargar hoy</button>
+          <button id="btnExportToday" class="btn">Exportar CSV</button>
+          <button id="btnResetDemo" class="btn btn-ghost">Reset demo</button>
+        </div>
+
+        <div id="reportSummary" class="summary"></div>
+        <div id="salesTable" class="table"></div>
+        <div id="repMsg" class="msg"></div>
+      </section>
+
+      <section id="tab-admin" class="tabpane card hidden admin-only">
+        <div class="pane-header">
+          <h2>Admin</h2>
+          <div class="muted">Inicialización y herramientas.</div>
+        </div>
+
+        <div class="card inner">
+          <h3>Cargar productos del PDF</h3>
+          <p class="muted">
+            Crea los productos base (nombres) y deja precio/stock en 0 para que los edites.
+          </p>
+          <button id="btnSeed" class="btn">Cargar productos</button>
+          <div id="seedMsg" class="msg"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <!-- MODAL: cantidad -->
+  <div id="qtyModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-title">Cantidad</div>
+      <div class="modal-body">
+        <input id="qtyInput" type="number" min="1" step="1" value="1" />
+        <div id="qtyHint" class="muted small"></div>
+      </div>
+      <div class="row">
+        <button id="btnQtyCancel" class="btn btn-ghost" type="button">Cancelar</button>
+        <button id="btnQtyOk" class="btn" type="button">Agregar</button>
+      </div>
+    </div>
+  </div>
+
+  <footer id="footer" class="footer muted">
+    © <span id="year"></span> Kioskito • Demo offline
+  </footer>
+</body>
+</html>
