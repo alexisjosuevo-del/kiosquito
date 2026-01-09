@@ -114,7 +114,11 @@ let state = {
 
 const DEMO_USERS = [
   { username: "admin", password: "1234", role: "admin", uid: "admin", email: "admin" },
-  { username: "vendedor", password: "1234", role: "seller", uid: "vendedor", email: "vendedor" }
+  // Vendedores
+  { username: "vendedor", password: "1234", role: "seller", uid: "vendedor", email: "vendedor" },
+  { username: "M01", password: "M01@2026", role: "seller", uid: "M01", email: "M01" },
+  { username: "D02", password: "D02@2026", role: "seller", uid: "D02", email: "D02" },
+  { username: "A03", password: "A03@2026", role: "seller", uid: "A03", email: "A03" }
 ];
 
 boot();
@@ -172,7 +176,7 @@ function wireUI() {
     $("#authMsg").className = "msg"; $("#authMsg").textContent = "";
     const u = ($("#loginEmail").value || "").trim();
     const p = $("#loginPass").value || "";
-    const found = DEMO_USERS.find(x => x.username === u && x.password === p);
+    const found = DEMO_USERS.find(x => String(x.username||"").toLowerCase() === u.toLowerCase() && x.password === p);
     if (!found) {
       $("#authMsg").className = "msg err";
       $("#authMsg").textContent = "Usuario o contraseña incorrectos.";
@@ -191,7 +195,7 @@ function wireUI() {
 
   $("#btnForgot").onclick = () => {
     $("#authMsg").className = "msg";
-    $("#authMsg").textContent = "Demo offline: usa admin / 1234";
+    $("#authMsg").textContent = "Demo offline: usa admin/1234 o vendedores (vendedor/1234, M01, D02, A03)";
   };
 
   $("#btnSignOut").onclick = () => {
@@ -360,7 +364,7 @@ function restoreSession() {
   try {
     const data = JSON.parse(s);
     if (!data?.username) return;
-    const found = DEMO_USERS.find(x => x.username === data.username);
+    const found = DEMO_USERS.find(x => String(x.username||"").toLowerCase() === String(data.username||"").toLowerCase());
     if (!found) return;
     state.user = { uid: found.uid, email: found.email };
     state.profile = { role: found.role };
@@ -380,21 +384,43 @@ function writeJSON(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 
 async function loadProducts() {
   let products = readJSON(LS.products, null);
+  let changed = false;
+
   if (!products || !Array.isArray(products) || !products.length) {
     // bootstrap from seed
     const resp = await fetch("./seed_products.json");
     const seed = await resp.json();
     products = seed.map((p, idx) => ({
-      id: `p_${idx+1}`,
+      id: `p_${idx + 1}`,
       sku: String(p.sku || "").toUpperCase(),
       name: p.name,
       price: Number(p.price || 0),
+      cost: Number(p.cost || 0),
       stock: Number(p.stock || 0),
       active: p.active !== false
     }));
-    writeJSON(LS.products, products);
+    changed = true;
   }
-  state.products = products.sort((a,b) => (a.name||"").localeCompare(b.name||"", "es"));
+
+  // normaliza / retrocompatibilidad
+  products = products.map((p, idx) => {
+    const out = {
+      ...p,
+      id: p.id || `p_${idx + 1}`,
+      sku: String(p.sku || "").toUpperCase(),
+      name: p.name,
+      price: Number(p.price || 0),
+      cost: Number(p.cost || 0),
+      stock: Number(p.stock || 0),
+      active: p.active !== false
+    };
+    if (p.cost == null) changed = true;
+    if (!p.id || (String(p.sku || "") !== out.sku)) changed = true;
+    return out;
+  });
+
+  if (changed) writeJSON(LS.products, products);
+  state.products = products.sort((a, b) => (a.name || "").localeCompare(b.name || "", "es"));
 }
 
 function filterProducts(term) {
@@ -637,11 +663,26 @@ function renderProductsTable() {
   const list = state.products
     .filter(p => !term || (p.name || "").toLowerCase().includes(term) || (p.sku || "").toLowerCase().includes(term));
 
+  const profitLabel = (price, cost) => {
+    const pr = Number(price || 0);
+    const co = Number(cost || 0);
+    const gain = pr - co;
+    const pct = pr > 0 ? (gain / pr) * 100 : null;
+    return `${money(gain)}${pct == null ? "" : ` (${pct.toFixed(1)}%)`}`;
+  };
+
   const table = document.createElement("table");
   table.innerHTML = `
     <thead>
       <tr>
-        <th>SKU</th><th>Producto</th><th>Precio</th><th>Stock</th><th>Activo</th><th>Acción</th>
+        <th>SKU</th>
+        <th>Producto</th>
+        <th>Precio</th>
+        <th>Costo real</th>
+        <th>Ganancia</th>
+        <th>Stock</th>
+        <th>Activo</th>
+        <th>Acción</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -651,10 +692,14 @@ function renderProductsTable() {
 
   list.forEach(p => {
     const tr = document.createElement("tr");
+    const price = Number(p.price || 0);
+    const cost = Number(p.cost || 0);
     tr.innerHTML = `
       <td>${escapeHtml(p.sku || "")}</td>
       <td>${escapeHtml(p.name || "")}</td>
-      <td><input data-k="price" data-id="${p.id}" type="number" step="0.01" value="${Number(p.price || 0)}" /></td>
+      <td><input data-k="price" data-id="${p.id}" type="number" step="0.01" value="${price}" /></td>
+      <td><input data-k="cost" data-id="${p.id}" type="number" step="0.01" value="${cost}" /></td>
+      <td><span class="pill" data-profit="${p.id}">${escapeHtml(profitLabel(price, cost))}</span></td>
       <td><span class="badge">${Number(p.stock || 0)}</span></td>
       <td>
         <select data-k="active" data-id="${p.id}">
@@ -671,26 +716,43 @@ function renderProductsTable() {
   wrap.innerHTML = "";
   wrap.appendChild(table);
 
+  const updateProfit = (id) => {
+    const priceEl = wrap.querySelector(`input[data-id="${id}"][data-k="price"]`);
+    const costEl  = wrap.querySelector(`input[data-id="${id}"][data-k="cost"]`);
+    const profitEl = wrap.querySelector(`[data-profit="${id}"]`);
+    if (!priceEl || !costEl || !profitEl) return;
+    profitEl.textContent = profitLabel(Number(priceEl.value || 0), Number(costEl.value || 0));
+  };
+
+  wrap.querySelectorAll('input[data-k="price"], input[data-k="cost"]').forEach(inp => {
+    inp.oninput = () => updateProfit(inp.dataset.id);
+  });
+
   wrap.querySelectorAll("button[data-save]").forEach(btn => {
     btn.onclick = async () => {
       try {
         ensureLoggedIn();
         const id = btn.dataset.save;
         const priceEl = wrap.querySelector(`input[data-id="${id}"][data-k="price"]`);
+        const costEl  = wrap.querySelector(`input[data-id="${id}"][data-k="cost"]`);
         const activeEl = wrap.querySelector(`select[data-id="${id}"][data-k="active"]`);
         const price = Number(priceEl.value || 0);
+        const cost = Number(costEl.value || 0);
         const active = (activeEl.value === "true");
 
         const p = state.products.find(x => x.id === id);
         p.price = price;
+        p.cost = cost;
         p.active = active;
         writeJSON(LS.products, state.products);
 
         $("#prodMsg").className = "msg ok";
         $("#prodMsg").textContent = "Producto actualizado ✅";
         renderPosResults();
+        renderCart();
         renderInvResults();
-      } catch(e) {
+        renderProductsTable();
+      } catch (e) {
         $("#prodMsg").className = "msg err";
         $("#prodMsg").textContent = e?.message || String(e);
       }
@@ -710,6 +772,95 @@ function renderInvResults() {
     el.innerHTML = `<div class="item muted">Sin resultados.</div>`;
     return;
   }
+
+  const pick = (p) => {
+    state.selectedInvProduct = p;
+    $("#invSelectedHint").innerHTML =
+      `Seleccionado: <strong>${escapeHtml(p.name || "")}</strong> <span class="badge">${escapeHtml(p.sku || "")}</span> • Stock: <strong>${Number(p.stock || 0)}</strong>`;
+  };
+
+  const edit = (p) => {
+    try { ensureLoggedIn(); } catch (e) { alert(e?.message || String(e)); return; }
+
+    const name = window.prompt("Editar nombre del producto:", p.name || "");
+    if (name === null) return;
+
+    const sku = window.prompt("Editar SKU:", (p.sku || "").toUpperCase());
+    if (sku === null) return;
+    const skuU = String(sku || "").trim().toUpperCase();
+    if (!skuU) { alert("SKU inválido."); return; }
+    const dup = state.products.some(x => x.id !== p.id && String(x.sku || "").toUpperCase() === skuU);
+    if (dup) { alert("Ese SKU ya existe. Usa uno diferente."); return; }
+
+    const priceStr = window.prompt("Precio (venta):", String(Number(p.price || 0)));
+    if (priceStr === null) return;
+    const price = Number(priceStr || 0);
+    if (!Number.isFinite(price) || price < 0) { alert("Precio inválido."); return; }
+
+    const costStr = window.prompt("Costo real:", String(Number(p.cost || 0)));
+    if (costStr === null) return;
+    const cost = Number(costStr || 0);
+    if (!Number.isFinite(cost) || cost < 0) { alert("Costo inválido."); return; }
+
+    const stockStr = window.prompt("Stock:", String(Number(p.stock || 0)));
+    if (stockStr === null) return;
+    const stock = Number(stockStr || 0);
+    if (!Number.isFinite(stock) || stock < 0) { alert("Stock inválido."); return; }
+
+    const active = window.confirm("¿Producto ACTIVO? (Aceptar = Sí / Cancelar = No)");
+
+    p.name = String(name || "").trim();
+    p.sku = skuU;
+    p.price = price;
+    p.cost = cost;
+    p.stock = Math.floor(stock);
+    p.active = active;
+
+    state.products = state.products.sort((a, b) => (a.name || "").localeCompare(b.name || "", "es"));
+    writeJSON(LS.products, state.products);
+
+    if (state.selectedInvProduct?.id === p.id) pick(p);
+
+    flash("Producto editado ✅", "ok");
+    renderPosResults();
+    renderCart();
+    renderProductsTable();
+    renderInvResults();
+  };
+
+  // "Eliminar" en Inventario: SOLO elimina el stock (no borra el producto)
+  const remove = async (p) => {
+    try { ensureLoggedIn(); } catch (e) { alert(e?.message || String(e)); return; }
+
+    const cur = Number(p.stock || 0);
+    const ok = window.confirm(
+      `¿Eliminar el stock de "${p.name}" (${p.sku})?\n\n` +
+      `Stock actual: ${cur}\n` +
+      `Esto pondrá el stock en 0. El producto NO se elimina.`
+    );
+    if (!ok) return;
+
+    try {
+      await applyInventory({
+        productId: p.id,
+        type: "set",
+        qty: 0,
+        reason: "Eliminar stock (reset a 0)"
+      });
+    } catch (e) {
+      alert(e?.message || String(e));
+      return;
+    }
+
+    if (state.selectedInvProduct?.id === p.id) pick(p);
+
+    flash("Stock eliminado (0) 🗑️", "ok");
+    renderPosResults();
+    renderCart();
+    renderProductsTable();
+    renderInvResults();
+  };
+
   list.forEach(p => {
     const row = document.createElement("div");
     row.className = "item";
@@ -718,12 +869,17 @@ function renderInvResults() {
         <div><strong>${escapeHtml(p.name)}</strong> <span class="badge">${escapeHtml(p.sku || "")}</span></div>
         <div class="muted small">Stock: ${Number(p.stock || 0)}</div>
       </div>
-      <button class="btn btn-ghost">Elegir</button>
+      <div style="margin-left:auto; display:flex; gap:.5rem; flex-wrap:wrap; justify-content:flex-end;">
+        <button class="btn btn-ghost" data-act="pick">Elegir</button>
+        <button class="btn btn-ghost" data-act="edit">Editar</button>
+        <button class="btn btn-ghost" data-act="del">Eliminar</button>
+      </div>
     `;
-    row.querySelector("button").onclick = () => {
-      state.selectedInvProduct = p;
-      $("#invSelectedHint").innerHTML = `Seleccionado: <strong>${escapeHtml(p.name)}</strong> • Stock: <strong>${Number(p.stock || 0)}</strong>`;
-    };
+
+    row.querySelector('[data-act="pick"]').onclick = () => pick(p);
+    row.querySelector('[data-act="edit"]').onclick = () => edit(p);
+    row.querySelector('[data-act="del"]').onclick = () => remove(p);
+
     el.appendChild(row);
   });
 }

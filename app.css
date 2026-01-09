@@ -150,6 +150,16 @@ tr:hover td{background: rgba(255,255,255,.03)}
   background: rgba(0,0,0,.10);
 }
 
+/* Admin > Productos: hacer más amplia la columna de Ganancia */
+#productsTable table th:nth-child(5),
+#productsTable table td:nth-child(5){
+  min-width: 180px;
+}
+#productsTable .pill{
+  display: inline-block;
+  white-space: nowrap;
+}
+
 
 
 /* ===== Login screen ===== */

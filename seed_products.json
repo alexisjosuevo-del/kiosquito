@@ -4,167 +4,191 @@
     "name": "Coca cola",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "COCA-COLA-LIGHT",
     "name": "Coca cola light",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "COCA-COLA-ZERO",
     "name": "Coca cola zero",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "SPRITE-ZERO",
     "name": "Sprite zero",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "SIDRAL-LIGHT",
     "name": "Sidral light",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "ELECTROLIT",
     "name": "Electrolit",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "GATORADE",
     "name": "Gatorade",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "AGUA-MINERAL-TOPOCHICO",
     "name": "Agua mineral topochico",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "PAPAS",
     "name": "Papas",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "PALETA-DE-HIELO",
     "name": "Paleta de hielo",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "ICE-GOMITAS-OSITO",
     "name": "Ice gomitas osito",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "ICE-ROPPERS",
     "name": "Ice roppers",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "ICE-PASTILLA",
     "name": "Ice pastilla",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "SWINKLEES-CLÁSICOS",
     "name": "Swinklees clásicos",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "PALETA-CRAZY-DIOS",
     "name": "Paleta crazy dios",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "XTREME",
     "name": "Xtreme",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "PALETA-NEÓN",
     "name": "Paleta neón",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "CRAYÓN",
     "name": "Crayón",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "LUCAS-GUSANO",
     "name": "Lucas gusano",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "CHICLE-HUBBA-BUBA",
     "name": "Chicle hubba buba",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "LLAVE-GOMITA",
     "name": "Llave gomita",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "INSPIREKA",
     "name": "Inspireka",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "CONEJITO-CHOCOLATE",
     "name": "Conejito chocolate",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   },
   {
     "sku": "DULCE-NUEVO",
     "name": "Dulce nuevo",
     "price": 0.0,
     "stock": 0,
-    "active": true
+    "active": true,
+    "cost": 0.0
   }
 ]
