@@ -3,18 +3,55 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Kioskito | Inventario & Ventas (Offline)</title>
+  <title>Kioskito | Inventario & Ventas (En vivo)</title>
   <link rel="icon" href="assets/logo.jpeg" />
   <link rel="stylesheet" href="app.css" />
-  <script type="module" src="./app_offline.js"></script>
+  <script type="module" src="./app_firebase.js"></script>
 </head>
 <body>
+
+  <!-- Splash / Intro -->
+  <div id="splash" class="splash">
+    <video id="splashVideo" class="splashVideo" autoplay muted playsinline>
+      <source src="assets/splash.mp4" type="video/mp4" />
+    </video>
+  </div>
+  <script>
+    (function(){
+      const splash = document.getElementById('splash');
+      const vid = document.getElementById('splashVideo');
+      const MIN_MS = 1400;   // mínimo visible
+      const MAX_MS = 2600;   // forzar salida
+      const start = Date.now();
+
+      const hide = () => {
+        if (!splash || splash.classList.contains('hide')) return;
+        splash.classList.add('hide');
+        setTimeout(()=> splash.remove(), 650);
+      };
+
+      // Si termina antes, respetar mínimo
+      if (vid) {
+        vid.addEventListener('ended', () => {
+          const left = Math.max(0, MIN_MS - (Date.now()-start));
+          setTimeout(hide, left);
+        });
+        // Si el autoplay está bloqueado, se sale solo
+        vid.addEventListener('error', () => setTimeout(hide, MIN_MS));
+        // Por si se queda colgado
+        setTimeout(hide, MAX_MS);
+      } else {
+        setTimeout(hide, MAX_MS);
+      }
+    })();
+  </script>
+
   <header id="topbar" class="topbar">
     <div class="brand">
       <img src="assets/logo.jpeg" class="logo" alt="Kioskito" />
       <div>
         <div class="brand-title">Kioskito</div>
-        <div class="brand-sub">Inventario & Punto de venta (Offline demo)</div>
+        <div class="brand-sub">Inventario & Punto de venta (En vivo)</div>
       </div>
     </div>
     <div class="top-actions">
@@ -30,7 +67,7 @@
         <div class="login-head">
           <img src="assets/logo.jpeg" class="login-logo" alt="Kioskito" />
           <h1 class="login-title">Iniciar sesión</h1>
-          <p class="muted">Acceso offline • Admin / Vendedor</p>
+          <p class="muted">Acceso en vivo • Firebase Auth (Admin / Vendedor)</p>
         </div>
 
         <div class="login-fields">
@@ -56,9 +93,7 @@
         <button id="btnLogin" class="btn btn-primary full" type="button">Entrar</button>
         <div id="authMsg" class="msg"></div>
 
-        <div class="login-hint muted small">
-          Demo: <span class="kbd">admin</span>/<span class="kbd">1234</span> • <span class="kbd">vendedor</span>/<span class="kbd">1234</span>
-        </div>
+        <!-- Sin credenciales demo: todo el acceso es con Firebase Auth -->
       </div>
     </section>
 
@@ -255,7 +290,7 @@
   </div>
 
   <footer id="footer" class="footer muted">
-    © <span id="year"></span> Kioskito • Demo offline
+    © <span id="year"></span> Kioskito • Firebase (tiempo real)
   </footer>
 </body>
 </html>

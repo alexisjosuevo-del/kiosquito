@@ -1,7 +1,8 @@
-# Kioskito – Inventario & Ventas (OFFLINE demo)
+# Kioskito – Inventario & Ventas (Firebase tiempo real)
 
-Esta versión es **solo para ver la interfaz y probar** sin Firebase.
-Todo se guarda en tu navegador (localStorage).
+Esta versión guarda y sincroniza en **tiempo real** usando **Firebase Firestore**.
+
+(Se incluye `app_offline.js` como respaldo offline, pero el `index.html` usa `app_firebase.js`.)
 
 ## Credenciales demo
 - **Usuario:** admin
@@ -31,3 +32,37 @@ Luego abre:
 7. Ve a **Reportes** para ver ventas del día / exportar CSV
 
 > Tip: Si quieres borrar todo, en Reportes presiona **Reset demo**.
+
+
+
+## 🔥 Configuración Firebase (Firestore)
+
+Este proyecto usa estas colecciones:
+- `products` (catálogo)
+- `sales` (ventas)
+- `shifts` (cajas)
+- `inv_movements` (movimientos de inventario)
+
+### 1) Crear Firestore
+Firebase Console → **Firestore Database** → Crear base de datos.
+
+### 2) Reglas (rápido para pruebas)
+En **Firestore → Rules**, puedes usar esto **solo para pruebas**:
+
+```txt
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+⚠️ En producción, NO uses `if true;`. Lo ideal es configurar **Firebase Auth** y reglas por usuario/rol.
+
+### 3) Publicar
+- Si usas **GitHub Pages**, solo sube el contenido del proyecto.
+- O local: `python -m http.server 8080` y abre `http://localhost:8080`.
+

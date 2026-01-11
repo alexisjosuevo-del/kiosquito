@@ -290,3 +290,9 @@ tr:hover td{background: rgba(255,255,255,.03)}
   color: var(--text);
   outline: none;
 }
+
+
+/* Splash Intro */
+.splash{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0b0f14;z-index:9999;}
+.splash.hide{opacity:0;transition:opacity .6s ease;pointer-events:none;}
+.splashVideo{width:min(360px,80vw);height:auto;max-height:80vh;}
