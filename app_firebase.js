@@ -442,6 +442,86 @@ function wireUI() {
 
   // Inventory
   $("#invSearch").oninput = () => renderInvResults();
+
+  // Inventario: agregar producto (en vivo)
+  const toggleInvAdd = (show) => {
+    const wrap = $("#invAddWrap");
+    if (!wrap) return;
+    wrap.style.display = show ? "block" : "none";
+    if (show) {
+      $("#invAddName").focus();
+    } else {
+      $("#invAddName").value = "";
+      $("#invAddQty").value = "";
+      $("#invAddMsg").textContent = "";
+      $("#invAddMsg").className = "msg";
+    }
+  };
+
+  const slugSku = (name) => {
+    const base = String(name || "")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // quita acentos
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .replace(/-+/g, "-");
+    return base || "PRODUCTO";
+  };
+
+  const ensureUniqueSku = (skuBase) => {
+    let sku = skuBase;
+    let i = 2;
+    const exists = (s) => state.products.some(p => String(p.sku || "").toUpperCase() === String(s).toUpperCase());
+    while (exists(sku)) {
+      sku = `${skuBase}-${i++}`;
+    }
+    return sku;
+  };
+
+  $("#btnShowAddProduct")?.addEventListener("click", () => toggleInvAdd(true));
+  $("#btnCancelCreateProduct")?.addEventListener("click", () => toggleInvAdd(false));
+
+  $("#btnCreateProduct")?.addEventListener("click", async () => {
+    try {
+      ensureLoggedIn();
+      const name = ($("#invAddName").value || "").trim();
+      const qty = Number($("#invAddQty").value || 0);
+
+      if (!name) throw new Error("Ingresa el nombre del producto.");
+      if (!Number.isFinite(qty) || qty < 0) throw new Error("Cantidad inválida.");
+
+      const skuBase = ensureUniqueSku(slugSku(name));
+      $("#invAddMsg").className = "msg";
+      $("#invAddMsg").textContent = "Creando producto…";
+
+      // Creamos en Firestore (productos). Precio/costo default en 0.
+      const newDoc = doc(col.products); // auto-id
+      await setDoc(newDoc, {
+        sku: skuBase,
+        name,
+        category: "General",
+        price: 0,
+        cost: 0,
+        stock: qty,
+        active: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      $("#invAddMsg").className = "msg ok";
+      $("#invAddMsg").textContent = `Producto agregado ✅ (${skuBase})`;
+      toggleInvAdd(false);
+
+      // La suscripción onSnapshot actualizará state.products; forzamos render por si acaso.
+      renderInvResults();
+      renderProductsTable();
+      renderPosResults();
+    } catch (e) {
+      $("#invAddMsg").className = "msg err";
+      $("#invAddMsg").textContent = e?.message || String(e);
+    }
+  });
+
   $("#btnApplyInv").onclick = async () => {
     $("#invMsg").className = "msg"; $("#invMsg").textContent = "";
     try {
@@ -598,7 +678,7 @@ function filterProducts(term) {
 
 function renderPosResults() {
   const term = $("#posSearch").value;
-  const list = filterProducts(term).slice(0, 30);
+  const list = filterProducts(term).slice(0, 500);
   const el = $("#posResults");
   el.innerHTML = "";
   if (!list.length) {
@@ -1035,7 +1115,7 @@ function renderInvResults() {
   const term = ($("#invSearch").value || "").toLowerCase().trim();
   const list = state.products
     .filter(p => !term || (p.name || "").toLowerCase().includes(term) || (p.sku || "").toLowerCase().includes(term))
-    .slice(0, 30);
+    .slice(0, 500);
 
   const el = $("#invResults");
   el.innerHTML = "";

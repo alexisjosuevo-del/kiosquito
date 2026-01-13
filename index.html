@@ -207,6 +207,27 @@
           <div>
             <h3>Ajuste rápido</h3>
             <input id="invSearch" placeholder="Buscar producto..." />
+            <div class="row" style="display:flex; gap:10px; align-items:center; margin-top:10px; flex-wrap:wrap;">
+              <button id="btnShowAddProduct" class="btn ghost" type="button">+ Agregar producto</button>
+              <div id="invAddWrap" style="display:none; width:100%; margin-top:10px;">
+                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                  <label style="flex:2; min-width:220px;">
+                    Nombre del producto
+                    <input id="invAddName" placeholder="Ej. Galletas..." />
+                  </label>
+                  <label style="flex:1; min-width:160px;">
+                    Cantidad inicial
+                    <input id="invAddQty" type="number" inputmode="numeric" placeholder="0" />
+                  </label>
+                  <div style="display:flex; gap:10px; align-items:center; margin-bottom:2px;">
+                    <button id="btnCreateProduct" class="btn" type="button">Crear</button>
+                    <button id="btnCancelCreateProduct" class="btn ghost" type="button">Cancelar</button>
+                  </div>
+                </div>
+                <div id="invAddMsg" class="msg"></div>
+              </div>
+            </div>
+
             <div id="invResults" class="list"></div>
           </div>
           <div>
