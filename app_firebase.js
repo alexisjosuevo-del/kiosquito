@@ -33,6 +33,7 @@ const col = {
   sales: collection(db, "sales"),
   shifts: collection(db, "shifts"),
   inv: collection(db, "inv_movements"),
+  audit: collection(db, "audit_logs"),
 };
 
 function tsToISO(ts) {
@@ -406,10 +407,62 @@ function wireUI() {
     try {
       ensureLoggedIn();
       const openingCash = Number($("#openCash").value || 0);
-      await openShift({ openingCash });
+      // Si ya existe la caja del día (abierta o cerrada), permitir corregir la apertura.
       await refreshShift();
-      $("#openMsg").className = "msg ok";
-      $("#openMsg").textContent = "Caja abierta ✅";
+      if (state.shift) {
+        const ref = doc(col.shifts, state.shift.id);
+        const oldOpeningCash = Number(state.shift.openingCash || 0);
+        const newOpeningCash = Number(openingCash || 0);
+        const wasClosed = !!state.shift.closedAt;
+
+        await updateDoc(ref, {
+          openingCash: newOpeningCash,
+          updatedAt: serverTimestamp(),
+        });
+
+        // Auditoría (solo si cambió el valor)
+        if (oldOpeningCash !== newOpeningCash) {
+          const auditRef = doc(col.audit);
+          await setDoc(auditRef, {
+            kind: "shift_openingCash_update",
+            shiftId: state.shift.id,
+            dateKey: state.shift.dateKey || todayKey(),
+            uid: state.user?.uid || null,
+            email: state.user?.email || null,
+            username: state.profile?.username || null,
+            role: state.profile?.role || null,
+            oldOpeningCash,
+            newOpeningCash,
+            wasClosed,
+            createdAt: serverTimestamp(),
+          });
+        }
+
+        await refreshShift();
+        $("#openMsg").className = "msg ok";
+        $("#openMsg").textContent = "Apertura actualizada ✅";
+      } else {
+        await openShift({ openingCash });
+        await refreshShift();
+
+        // Auditoría apertura
+        const aRef = doc(col.audit);
+        await setDoc(aRef, {
+          id: aRef.id,
+          kind: "shift_open",
+          createdAt: serverTimestamp(),
+          uid: state.user?.uid || null,
+          email: state.user?.email || null,
+          username: state.profile?.username || null,
+          role: state.profile?.role || null,
+          shiftId: state.shift?.id || shiftIdForToday(state.user.uid),
+          dateKey: state.shift?.dateKey || todayKey(),
+          openingCash: Number(openingCash || 0),
+        });
+
+        $("#openMsg").className = "msg ok";
+        $("#openMsg").textContent = "Caja abierta ✅";
+      }
     } catch (e) {
       $("#openMsg").className = "msg err";
       $("#openMsg").textContent = e?.message || String(e);
@@ -942,6 +995,7 @@ function updateCashView() {
     // No hay apertura hoy
     setDisabled(openInput, false);
     setDisabled(openBtn, false);
+    if (openBtn) openBtn.textContent = "Abrir caja";
     setDisabled(closeInput, true);
     setDisabled(closeBtn, true);
     if (openMsg) openMsg.textContent = "";
@@ -956,23 +1010,26 @@ function updateCashView() {
   if (openInput) openInput.value = String(Number(shift.openingCash || 0));
   setValueIfEmpty(closeInput, shift.countedCash);
 
-  // Si está cerrado, bloquear acciones
+  // Si está cerrado: permitir corregir apertura (para admin y vendedores)
   if (isClosed) {
-    setDisabled(openInput, true);
-    setDisabled(openBtn, true);
+    setDisabled(openInput, false);
+    setDisabled(openBtn, false);
+    if (openBtn) openBtn.textContent = "Guardar apertura";
     setDisabled(closeInput, true);
     setDisabled(closeBtn, true);
-    if (openMsg) openMsg.textContent = "Caja cerrada hoy.";
+    if (openMsg) openMsg.textContent = "Caja cerrada hoy. Puedes corregir el efectivo inicial y guardarlo.";
     if (closeMsg) closeMsg.textContent = "Caja cerrada hoy.";
     return;
   }
 
   // Abierto
-  setDisabled(openInput, true);
-  setDisabled(openBtn, true);
+  // Permitir corregir apertura también cuando está abierta (por si se equivocan)
+  setDisabled(openInput, false);
+  setDisabled(openBtn, false);
+  if (openBtn) openBtn.textContent = "Guardar apertura";
   setDisabled(closeInput, false);
   setDisabled(closeBtn, false);
-  if (openMsg) openMsg.textContent = "Caja abierta.";
+  if (openMsg) openMsg.textContent = "Caja abierta. Si te equivocaste, corrige el efectivo inicial y presiona Guardar.";
   if (closeMsg) closeMsg.textContent = "";
 }
 
