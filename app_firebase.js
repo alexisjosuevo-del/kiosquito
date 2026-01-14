@@ -415,13 +415,43 @@ function wireUI() {
         const newOpeningCash = Number(openingCash || 0);
         const wasClosed = !!state.shift.closedAt;
 
-        await updateDoc(ref, {
-          openingCash: newOpeningCash,
-          updatedAt: serverTimestamp(),
-        });
+        // Si está cerrada y quieren volver a vender, reabrimos la caja del día.
+        // Regla: reabrir limpia el arqueo/cierre, pero conserva los acumulados de ventas del día.
+        if (wasClosed) {
+          const ok = confirm("La caja está cerrada hoy. ¿Deseas REABRIRLA para seguir vendiendo?");
+          if (!ok) return;
+          await updateDoc(ref, {
+            openingCash: newOpeningCash,
+            closedAt: null,
+            countedCash: null,
+            reopenedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          await updateDoc(ref, {
+            openingCash: newOpeningCash,
+            updatedAt: serverTimestamp(),
+          });
+        }
 
-        // Auditoría (solo si cambió el valor)
-        if (oldOpeningCash !== newOpeningCash) {
+        // Auditoría
+        // 1) Si reabrió: registrar reapertura (siempre)
+        if (wasClosed) {
+          const auditRef = doc(col.audit);
+          await setDoc(auditRef, {
+            kind: "shift_reopen",
+            shiftId: state.shift.id,
+            dateKey: state.shift.dateKey || todayKey(),
+            uid: state.user?.uid || null,
+            email: state.user?.email || null,
+            username: state.profile?.username || null,
+            role: state.profile?.role || null,
+            oldOpeningCash,
+            newOpeningCash,
+            createdAt: serverTimestamp(),
+          });
+        } else if (oldOpeningCash !== newOpeningCash) {
+          // 2) Si solo cambió apertura estando abierta: registrar update
           const auditRef = doc(col.audit);
           await setDoc(auditRef, {
             kind: "shift_openingCash_update",
@@ -440,7 +470,7 @@ function wireUI() {
 
         await refreshShift();
         $("#openMsg").className = "msg ok";
-        $("#openMsg").textContent = "Apertura actualizada ✅";
+        $("#openMsg").textContent = wasClosed ? "Caja reabierta ✅" : "Apertura actualizada ✅";
       } else {
         await openShift({ openingCash });
         await refreshShift();
@@ -1010,14 +1040,14 @@ function updateCashView() {
   if (openInput) openInput.value = String(Number(shift.openingCash || 0));
   setValueIfEmpty(closeInput, shift.countedCash);
 
-  // Si está cerrado: permitir corregir apertura (para admin y vendedores)
+  // Si está cerrado: permitir corregir apertura y reabrir (para admin y vendedores)
   if (isClosed) {
     setDisabled(openInput, false);
     setDisabled(openBtn, false);
-    if (openBtn) openBtn.textContent = "Guardar apertura";
+    if (openBtn) openBtn.textContent = "Reabrir caja";
     setDisabled(closeInput, true);
     setDisabled(closeBtn, true);
-    if (openMsg) openMsg.textContent = "Caja cerrada hoy. Puedes corregir el efectivo inicial y guardarlo.";
+    if (openMsg) openMsg.textContent = "Caja cerrada hoy. Si vas a vender, corrige el efectivo inicial y presiona Reabrir.";
     if (closeMsg) closeMsg.textContent = "Caja cerrada hoy.";
     return;
   }
