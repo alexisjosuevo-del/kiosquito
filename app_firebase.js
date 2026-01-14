@@ -676,44 +676,128 @@ function filterProducts(term) {
     .filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.sku || "").toLowerCase().includes(q));
 }
 
+function setCartQty(productId, qty) {
+  qty = Math.max(0, Math.floor(Number(qty || 0)));
+  const line = state.cart.find(x => x.productId === productId);
+  if (qty <= 0) {
+    if (line) state.cart = state.cart.filter(x => x !== line);
+    return;
+  }
+  if (line) line.qty = qty;
+  else state.cart.push({ productId, qty });
+}
+
 function renderPosResults() {
-  const term = $("#posSearch").value;
+  const term = ($("#posSearch")?.value || "");
   const list = filterProducts(term).slice(0, 500);
   const el = $("#posResults");
+  if (!el) return;
+
   el.innerHTML = "";
   if (!list.length) {
     el.innerHTML = `<div class="item muted">Sin resultados.</div>`;
     return;
   }
+
   list.forEach(p => {
     const stock = Number(p.stock || 0);
-    const disabled = stock <= 0 ? "opacity:.55; pointer-events:none" : "";
-    const badge = stock <= 0 ? `<span class="badge">Sin stock</span>` : `<span class="badge">Stock: ${stock}</span>`;
-    const row = document.createElement("div");
-    row.className = "item";
-    row.style = disabled;
-    row.innerHTML = `
-      <div>
-        <div><strong>${escapeHtml(p.name)}</strong> <span class="badge">${escapeHtml(p.sku || "")}</span></div>
-        <div class="muted small">${money(p.price || 0)} • ${badge}</div>
+    const line = state.cart.find(x => x.productId === p.id);
+    const qty = Number(line?.qty || 0);
+
+    const card = document.createElement("div");
+    card.className = `product-card${stock <= 0 ? " is-out" : ""}${qty > 0 ? " in-cart" : ""}${state.selectedProductId === p.id ? " selected" : ""}`;
+    card.dataset.id = p.id;
+
+    const badgeAvail = stock <= 0 ? `<span class="badge badge-out">Agotado</span>` : ``;
+
+    card.innerHTML = `
+      <div class="pc-name">${escapeHtml(p.name || "")}</div>
+      <div class="pc-meta">
+        ${(p.sku ? `<span class="badge pc-sku">${escapeHtml(p.sku)}</span>` : "")}
+        ${badgeAvail}
       </div>
-      <button class="btn btn-ghost">Agregar</button>
+      <div class="pc-sub">
+        <div>
+          <div class="pc-price">${money(p.price || 0)}</div>
+</div>
+        <div class="qty-stepper" aria-label="Cantidad">
+          <button class="qty-btn minus" type="button" aria-label="Quitar 1">−</button>
+          <div class="qty-val">${qty}</div>
+          <button class="qty-btn plus" type="button" aria-label="Agregar 1">+</button>
+        </div>
+      </div>
     `;
-    row.querySelector("button").onclick = async () => {
-      const qty = await openQtyModal(Number(p.stock || 0));
-      if (!qty) return;
-      addToCart(p.id, qty);
+
+    // Mostrar controles solo cuando el producto esté seleccionado
+    card.addEventListener("click", (ev) => {
+      const t = ev.target;
+      // Si presiona directamente + / -, no alternar selección extra
+      if (t && (t.classList?.contains("qty-btn") || t.closest?.(".qty-stepper"))) {
+        state.selectedProductId = p.id;
+        return;
+      }
+      state.selectedProductId = (state.selectedProductId === p.id) ? null : p.id;
+      renderProducts();
+    });
+
+    const btnMinus = card.querySelector(".minus");
+    const btnPlus = card.querySelector(".plus");
+
+    const refresh = () => {
+      const lineNow = state.cart.find(x => x.productId === p.id);
+      const qtyNow = Number(lineNow?.qty || 0);
+      card.querySelector(".qty-val").textContent = String(qtyNow);
+      card.classList.toggle("in-cart", qtyNow > 0);
+      card.classList.toggle("selected", state.selectedProductId === p.id);
+      btnMinus.disabled = qtyNow <= 0;
+      btnPlus.disabled = stock <= 0 || qtyNow >= stock;
     };
-    el.appendChild(row);
+
+    btnMinus.onclick = (e) => {
+      e.stopPropagation();
+      const cur = Number(state.cart.find(x => x.productId === p.id)?.qty || 0);
+      if (cur <= 0) return;
+      setCartQty(p.id, cur - 1);
+      renderCart();
+    };
+
+    btnPlus.onclick = (e) => {
+      e.stopPropagation();
+      const cur = Number(state.cart.find(x => x.productId === p.id)?.qty || 0);
+      if (stock <= 0 || cur >= stock) return;
+      setCartQty(p.id, cur + 1);
+      renderCart();
+    };
+
+    card.onclick = () => {
+      const cur = Number(state.cart.find(x => x.productId === p.id)?.qty || 0);
+      if (stock <= 0 || cur >= stock) return;
+      setCartQty(p.id, cur + 1);
+      renderCart();
+    };
+
+    refresh();
+    el.appendChild(card);
   });
 }
 
 function addToCart(productId, qty = 1) {
   const p = state.products.find(x => x.id === productId);
   if (!p) return;
+
+  const stock = Number(p.stock || 0);
+  const add = Math.max(1, Math.floor(Number(qty || 1)));
+
   const existing = state.cart.find(x => x.productId === productId);
-  if (existing) existing.qty += Number(qty || 1);
-  else state.cart.push({ productId, qty: Number(qty || 1) });
+  const cur = Number(existing?.qty || 0);
+  let next = cur + add;
+
+  if (stock > 0) next = Math.min(stock, next);
+  if (next <= 0) return;
+
+  if (existing) existing.qty = next;
+  else state.cart.push({ productId, qty: next });
+
   renderCart();
 }
 
@@ -747,7 +831,7 @@ function renderCart() {
       `;
       const btns = row.querySelectorAll("button");
       btns[0].onclick = () => { line.qty = Math.max(1, line.qty - 1); renderCart(); };
-      btns[1].onclick  = () => { line.qty += 1; renderCart(); };
+      btns[1].onclick  = () => { const stock = Number(p.stock || 0); if (stock > 0) line.qty = Math.min(stock, line.qty + 1); renderCart(); };
       btns[2].onclick   = () => { state.cart = state.cart.filter(x => x !== line); renderCart(); };
       el.appendChild(row);
     });
@@ -755,6 +839,7 @@ function renderCart() {
 
   $("#cartSubtotal").textContent = money(subtotal);
   $("#cartTotal").textContent = money(subtotal);
+  if ($("#posResults")) renderPosResults();
 }
 
 function shiftIdForToday(uid) {
