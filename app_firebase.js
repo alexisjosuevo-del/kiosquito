@@ -965,14 +965,30 @@ async function createSale({ method, note }) {
     if (!shSnap.exists()) throw new Error("Abre la caja antes de vender.");
     if (shSnap.data()?.closedAt) throw new Error("La caja está cerrada.");
 
-    // update stock per product
-    for (const it of items) {
-      const pRef = doc(col.products, it.productId);
+    // update stock per product (Firestore requiere TODAS las lecturas antes de las escrituras)
+    // Si un producto aparece varias veces en el carrito, sumamos cantidades
+    const qtyById = {};
+    for (const it of items) qtyById[it.productId] = (qtyById[it.productId] || 0) + Number(it.qty || 0);
+
+    const stockById = {};
+
+    // 1) READS (solo lecturas)
+    for (const [pid, q] of Object.entries(qtyById)) {
+      const pRef = doc(col.products, pid);
       const pSnap = await tx.get(pRef);
       if (!pSnap.exists()) throw new Error("Producto no encontrado en Firestore.");
       const cur = Number(pSnap.data()?.stock || 0);
-      if (cur < it.qty) throw new Error(`Stock insuficiente: ${it.name}`);
-      tx.update(pRef, { stock: cur - it.qty, updatedAt: serverTimestamp() });
+      if (cur < q) {
+        const nm = (items.find(x => x.productId === pid)?.name) || pid;
+        throw new Error(`Stock insuficiente: ${nm}`);
+      }
+      stockById[pid] = cur;
+    }
+
+    // 2) WRITES (solo escrituras)
+    for (const [pid, q] of Object.entries(qtyById)) {
+      const pRef = doc(col.products, pid);
+      tx.update(pRef, { stock: stockById[pid] - q, updatedAt: serverTimestamp() });
     }
 
     // create sale
