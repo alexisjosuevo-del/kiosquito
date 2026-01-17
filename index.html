@@ -6,6 +6,8 @@
   <title>Kioskito | Inventario & Ventas (En vivo)</title>
   <link rel="icon" href="assets/logo.jpeg" />
   <link rel="stylesheet" href="app.css" />
+  <!-- Exportación a Excel (2 pestañas) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script type="module" src="./app_firebase.js"></script>
 </head>
 <body>
@@ -268,12 +270,19 @@
 
         <div class="row">
           <button id="btnLoadToday" class="btn btn-ghost">Cargar hoy</button>
+          <button id="btnLoadHistory" class="btn btn-ghost">Cargar histórico</button>
           <button id="btnExportToday" class="btn">Exportar CSV</button>
+          <button id="btnExportExcel" class="btn btn-ghost">Exportar Excel</button>
           <button id="btnResetDemo" class="btn btn-ghost">Reset demo</button>
         </div>
 
         <div id="reportSummary" class="summary"></div>
         <div id="salesTable" class="table"></div>
+        <div class="card inner" id="shiftHistoryCard">
+          <h3>Histórico de aperturas de caja</h3>
+          <div class="muted small">Últimas aperturas/cierres (por usuario y día).</div>
+          <div id="shiftHistory" class="table mt"></div>
+        </div>
         <div id="repMsg" class="msg"></div>
       </section>
 

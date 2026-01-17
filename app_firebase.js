@@ -9,7 +9,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  onSnapshot, query, where, runTransaction, serverTimestamp, writeBatch
+  onSnapshot, query, where, orderBy, limit, startAfter, runTransaction, serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -636,7 +636,16 @@ function wireUI() {
       $("#repMsg").className = "msg err"; $("#repMsg").textContent = e?.message || String(e);
     }
   };
-  $("#btnExportToday").onclick = () => exportTodayCSV();
+  $("#btnLoadHistory").onclick = async () => {
+    $("#repMsg").className = "msg"; $("#repMsg").textContent = "";
+    try { await loadSalesHistory(90); } catch(e) {
+      $("#repMsg").className = "msg err"; $("#repMsg").textContent = e?.message || String(e);
+    }
+  };
+  // Exporta historico (todas las ventas) para que el CSV no salga vacio
+  $("#btnExportToday").onclick = () => exportAllSalesCSV();
+  // Exporta Excel con 2 pestañas (Detalle + Resumen por dia)
+  $("#btnExportExcel").onclick = () => exportAllSalesXLSX();
   $("#btnResetDemo").onclick = async () => {
     if (!confirm("Esto borrará datos de DEMO en Firestore (ventas/cajas/movimientos/productos). ¿Continuar?")) return;
     try {
@@ -1515,10 +1524,13 @@ async function loadTodaySales({ silent=false } = {}) {
 
         state.salesToday = sales.slice(0, 250);
         window.__today_sales = state.salesToday;
+        // unified report state
+        window.__report_sales = state.salesToday;
+        window.__report_label = todayKey();
         if (!silent) flash("Ventas actualizadas (tiempo real) ✅", "ok");
 
         // render report
-        renderTodayReport();
+        renderReport();
         resolve();
       }, (err) => {
         console.error(err);
@@ -1531,11 +1543,127 @@ async function loadTodaySales({ silent=false } = {}) {
 
   // render with current state
   window.__today_sales = state.salesToday || [];
-  renderTodayReport();
+  window.__report_sales = window.__today_sales;
+  window.__report_label = todayKey();
+  renderReport();
+  // también mostramos aperturas/cierres historicos
+  loadShiftHistory().catch(()=>{});
 }
 
-function renderTodayReport() {
-  const sales = window.__today_sales || [];
+function dateKeyNDaysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - Number(n || 0));
+  return d.toISOString().slice(0,10);
+}
+
+// Cargar ventas históricas (por defecto últimos 90 días)
+async function loadSalesHistory(days = 90, { silent=false } = {}) {
+  const startKey = dateKeyNDaysAgo(days);
+  if (!silent) flash(`Cargando ventas históricas (últimos ${days} días)...`, "info");
+  const q = query(col.sales, where("dateKey", ">=", startKey));
+  const snap = await getDocs(q);
+  const sales = [];
+  snap.forEach(d => sales.push({ id: d.id, ...d.data() }));
+  // Orden local por fecha/hora
+  sales.sort((a,b) => {
+    const ak = String(a.dateKey || "");
+    const bk = String(b.dateKey || "");
+    if (ak !== bk) return ak < bk ? -1 : 1;
+    const at = (a.createdAt && a.createdAt.toDate) ? a.createdAt.toDate().getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+    const bt = (b.createdAt && b.createdAt.toDate) ? b.createdAt.toDate().getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+    return at - bt;
+  });
+
+  // Normalizar createdAt
+  sales.forEach(s => {
+    if (s.createdAt && s.createdAt.toDate) s.createdAt = s.createdAt.toDate().toISOString();
+  });
+
+  window.__report_sales = sales;
+  window.__report_label = `Histórico (${startKey} a ${todayKey()})`;
+  renderReport();
+  loadShiftHistory().catch(()=>{});
+  if (!silent) flash(`Ventas históricas cargadas: ${sales.length}`, "ok");
+}
+
+// Cargar historial de aperturas/cierres de caja para Reportes
+async function loadShiftHistory(limitN = 100) {
+  const el = $("#shiftHistory");
+  if (!el) return;
+  el.innerHTML = `<div class="muted">Cargando aperturas...</div>`;
+  try {
+    const q = query(col.shifts, orderBy("openedAt", "desc"), limit(limitN));
+    const snap = await getDocs(q);
+    const shifts = [];
+    snap.forEach(d => shifts.push({ id: d.id, ...d.data() }));
+
+    renderShiftHistory(shifts);
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div class="msg err">No se pudo cargar histórico de aperturas.</div>`;
+  }
+}
+
+function renderShiftHistory(shifts) {
+  const el = $("#shiftHistory");
+  if (!el) return;
+  if (!Array.isArray(shifts) || shifts.length === 0) {
+    el.innerHTML = `<div class="muted">Sin aperturas registradas.</div>`;
+    return;
+  }
+
+  const table = document.createElement("table");
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>FECHA</th>
+        <th>USUARIO</th>
+        <th>APERTURA</th>
+        <th>CIERRE</th>
+        <th>INICIO</th>
+        <th>VENTAS</th>
+        <th>CONTADO</th>
+        <th>DIF</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+  const tbody = table.querySelector("tbody");
+
+  shifts.forEach(s => {
+    const openedAt = (s.openedAt && s.openedAt.toDate) ? s.openedAt.toDate() : (s.openedAt ? new Date(s.openedAt) : null);
+    const closedAt = (s.closedAt && s.closedAt.toDate) ? s.closedAt.toDate() : (s.closedAt ? new Date(s.closedAt) : null);
+    const openTime = openedAt ? openedAt.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) : "";
+    const closeTime = closedAt ? closedAt.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) : "";
+    const dateKey = s.dateKey || (openedAt ? openedAt.toISOString().slice(0,10) : "");
+    const openingCash = Number(s.openingCash || 0);
+    const cashSales = Number(s.cashSales || 0);
+    const counted = Number(s.countedCash || 0);
+    const expected = openingCash + cashSales;
+    const diff = counted - expected;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(dateKey)}</td>
+      <td>${escapeHtml(s.email || s.uid || "")}</td>
+      <td>${escapeHtml(openTime)}</td>
+      <td>${escapeHtml(closeTime)}</td>
+      <td><strong>${money(openingCash)}</strong></td>
+      <td>${money(cashSales)}</td>
+      <td>${money(counted)}</td>
+      <td>${money(diff)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  el.innerHTML = "";
+  el.appendChild(table);
+}
+
+// ---- Reports helpers
+function renderReport() {
+  const sales = window.__report_sales || window.__today_sales || [];
+  const label = window.__report_label || todayKey();
   const total = sales.reduce((a, s) => a + Number(s.total || 0), 0);
   const cash = sales.filter(s => s.method === "cash").reduce((a, s) => a + Number(s.total || 0), 0);
   const card = sales.filter(s => s.method === "card").reduce((a, s) => a + Number(s.total || 0), 0);
@@ -1552,7 +1680,7 @@ function renderTodayReport() {
       <div class="row between">
         <div>
           <div class="muted small">Fecha</div>
-          <div><strong>${todayKey()}</strong></div>
+          <div><strong>${escapeHtml(label)}</strong></div>
         </div>
         <div class="pill">Ventas: <strong>${sales.length}</strong></div>
       </div>
@@ -1653,7 +1781,8 @@ function renderSalesTable(sales) {
 }
 
 function exportTodayCSV() {
-  const rows = window.__today_sales || [];
+  // Exporta lo que se ve en Reportes (hoy o histórico cargado)
+  const rows = window.__report_sales || window.__today_sales || [];
   const head = ["dateKey","time","email","method","total","items","note"];
   const lines = [head.join(",")];
 
@@ -1678,6 +1807,166 @@ function exportTodayCSV() {
   a.download = `ventas_${todayKey()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+// Exporta todas las ventas guardadas en Firestore (histórico)
+async function exportAllSalesCSV() {
+  try {
+    ensureLoggedIn();
+    flash("Exportando ventas históricas...", "info");
+    const all = [];
+    let q = query(col.sales, orderBy("createdAt", "desc"), limit(2000));
+    let pages = 0;
+    while (true) {
+      const snap = await getDocs(q);
+      snap.forEach(d => all.push({ id: d.id, ...d.data() }));
+      pages++;
+      if (snap.size < 2000) break;
+      if (pages >= 10) break; // seguridad: max ~20k
+      const last = snap.docs[snap.docs.length - 1];
+      q = query(col.sales, orderBy("createdAt", "desc"), startAfter(last), limit(2000));
+    }
+
+    // Normalizar createdAt
+    all.forEach(s => {
+      if (s.createdAt && s.createdAt.toDate) s.createdAt = s.createdAt.toDate().toISOString();
+    });
+
+    const head = ["dateKey","time","email","method","total","items","note"];
+    const lines = [head.join(",")];
+    all.forEach(s => {
+      const time = s.createdAt || "";
+      const items = Array.isArray(s.items) ? s.items.map(i => `${i.qty}x ${i.name}`).join(" | ") : "";
+      const vals = [
+        s.dateKey || "",
+        time,
+        s.email || s.uid || "",
+        s.method || "",
+        Number(s.total || 0).toFixed(2),
+        items,
+        (s.note || "").replaceAll("\n"," ").replaceAll("\r"," ")
+      ].map(csvEscape);
+      lines.push(vals.join(","));
+    });
+
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `ventas_historico_hasta_${todayKey()}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    flash(`CSV generado: ${all.length} ventas ✅`, "ok");
+  } catch (e) {
+    console.error(e);
+    flash(e?.message || String(e), "err");
+  }
+}
+
+// Exporta Excel con 2 pestañas: "Ventas" (detalle) y "Resumen por dia"
+async function exportAllSalesXLSX() {
+  try {
+    ensureLoggedIn();
+    if (typeof XLSX === "undefined") {
+      throw new Error("No se pudo cargar la libreria de Excel (XLSX). Revisa tu conexion a internet o permite el CDN.");
+    }
+    flash("Exportando Excel (historico + resumen por dia)...", "info");
+
+    const all = [];
+    let q = query(col.sales, orderBy("createdAt", "desc"), limit(2000));
+    let pages = 0;
+    while (true) {
+      const snap = await getDocs(q);
+      snap.forEach(d => all.push({ id: d.id, ...d.data() }));
+      pages++;
+      if (snap.size < 2000) break;
+      if (pages >= 10) break; // seguridad: max ~20k
+      const last = snap.docs[snap.docs.length - 1];
+      q = query(col.sales, orderBy("createdAt", "desc"), startAfter(last), limit(2000));
+    }
+
+    // Normalizar createdAt
+    all.forEach(s => {
+      if (s.createdAt && s.createdAt.toDate) s.createdAt = s.createdAt.toDate().toISOString();
+    });
+
+    // ---- Hoja 1: Detalle
+    const head1 = ["dateKey", "hora", "usuario", "metodo", "total", "items", "nota"];
+    const rows1 = [head1];
+    all.forEach(s => {
+      const d = s.createdAt ? new Date(s.createdAt) : null;
+      const hora = d ? d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) : "";
+      const items = Array.isArray(s.items) ? s.items.map(i => `${i.qty}x ${i.name}`).join(" | ") : "";
+      rows1.push([
+        s.dateKey || "",
+        hora,
+        s.email || s.uid || "",
+        s.method || "",
+        Number(s.total || 0),
+        items,
+        (s.note || "").replaceAll("\n", " ").replaceAll("\r", " ")
+      ]);
+    });
+
+    // ---- Hoja 2: Resumen por dia
+    const byDay = new Map();
+    all.forEach(s => {
+      const dk = s.dateKey || "";
+      if (!dk) return;
+      const key = dk;
+      if (!byDay.has(key)) byDay.set(key, { dateKey: key, ventas: 0, total: 0, efectivo: 0, tarjeta_transfer: 0 });
+      const agg = byDay.get(key);
+      const total = Number(s.total || 0);
+      agg.ventas += 1;
+      agg.total += total;
+      const m = String(s.method || "").toLowerCase();
+      if (m.includes("efect")) agg.efectivo += total;
+      else agg.tarjeta_transfer += total;
+    });
+
+    const head2 = ["dateKey", "ventas", "total", "efectivo", "tarjeta_transfer", "ticket_promedio"];
+    const rows2 = [head2];
+    // ordenar por fecha asc (YYYY-MM-DD)
+    const days = Array.from(byDay.values()).sort((a, b) => String(a.dateKey).localeCompare(String(b.dateKey)));
+    days.forEach(d => {
+      const prom = d.ventas ? (d.total / d.ventas) : 0;
+      rows2.push([d.dateKey, d.ventas, d.total, d.efectivo, d.tarjeta_transfer, prom]);
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.aoa_to_sheet(rows1);
+    const ws2 = XLSX.utils.aoa_to_sheet(rows2);
+
+    // Formatos basicos (numeros con 2 decimales)
+    const moneyCols1 = [4];
+    const moneyCols2 = [2, 3, 4, 5];
+    formatSheetNumberCols(ws1, rows1.length, moneyCols1);
+    formatSheetNumberCols(ws2, rows2.length, moneyCols2);
+
+    XLSX.utils.book_append_sheet(wb, ws1, "Ventas");
+    XLSX.utils.book_append_sheet(wb, ws2, "Resumen por dia");
+
+    const filename = `ventas_historico_con_resumen_${todayKey()}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    flash(`Excel generado: ${all.length} ventas ✅`, "ok");
+  } catch (e) {
+    console.error(e);
+    flash(e?.message || String(e), "err");
+  }
+}
+
+function formatSheetNumberCols(ws, rowCount, cols) {
+  try {
+    for (let r = 2; r <= rowCount; r++) {
+      for (const c of cols) {
+        const addr = XLSX.utils.encode_cell({ r: r - 1, c });
+        if (!ws[addr]) continue;
+        ws[addr].t = "n";
+        ws[addr].z = "0.00";
+      }
+    }
+  } catch {
+    // best-effort
+  }
 }
 
 function csvEscape(v) {
